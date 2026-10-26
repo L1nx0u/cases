@@ -15,18 +15,23 @@ export function storageMode(): "blob" | "file" {
   return process.env.VERCEL === "1" ? "blob" : "file";
 }
 
+/**
+ * Lecture via l'API authentifiee (`get`), pas via l'URL publique : le CDN de Blob
+ * cle sur le chemin et ignore tout parametre de query, donc l'URL peut servir une
+ * copie de quelques secondes apres une ecriture. `get` renvoie null si le fichier
+ * n'existe pas ; toute autre erreur remonte, pour ne jamais afficher un tableau
+ * vide qui serait ensuite enregistre par-dessus les donnees reelles.
+ */
 async function readBlob(): Promise<Portfolio | null> {
-  const { head } = await import("@vercel/blob");
-  try {
-    const blob = await head(BLOB_KEY, { token: process.env.BLOB_READ_WRITE_TOKEN });
-    // Le bord de Vercel garde la reponse du blob quelques secondes apres une ecriture :
-    // un parametre unique force la lecture du fichier tel qu'il est maintenant.
-    const res = await fetch(`${blob.url}?t=${Date.now()}`, { cache: "no-store" });
-    if (!res.ok) return null;
-    return normalize(await res.json());
-  } catch {
-    return null;
-  }
+  const { get } = await import("@vercel/blob");
+  const result = await get(BLOB_KEY, {
+    access: "public",
+    token: process.env.BLOB_READ_WRITE_TOKEN,
+  });
+  if (result === null) return null;
+  if (!result.stream) throw new Error("Blob: reponse sans contenu");
+  const text = await new Response(result.stream).text();
+  return normalize(JSON.parse(text));
 }
 
 async function writeBlob(portfolio: Portfolio): Promise<void> {
@@ -45,8 +50,10 @@ async function readFile(): Promise<Portfolio | null> {
   try {
     const raw = await fs.readFile(LOCAL_FILE, "utf8");
     return normalize(JSON.parse(raw));
-  } catch {
-    return null;
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "ENOENT") return null;
+    throw error;
   }
 }
 
