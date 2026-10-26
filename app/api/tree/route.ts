@@ -1,8 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import { loadPortfolio, savePortfolio, storageMode } from "@/lib/store";
-import { isImageUrl, isSafeUrl, normalize, type Portfolio } from "@/lib/tree";
+import { load, savePortfolio, storageMode } from "@/lib/store";
+import { isSafeUrl, normalize, versionOf, type Portfolio } from "@/lib/tree";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ function urlProblem(portfolio: Portfolio): string | null {
   const walk = (nodes: Portfolio["root"]): string | null => {
     for (const node of nodes) {
       if (node.kind === "link" && node.url && !isSafeUrl(node.url)) return node.url;
-      if (node.icon && isImageUrl(node.icon) && !isSafeUrl(node.icon)) return node.icon;
+      if (node.icon && /^https?:\/\//i.test(node.icon) && !isSafeUrl(node.icon)) return node.icon;
       if (node.kind === "folder") {
         const hit = walk(node.children ?? []);
         if (hit) return hit;
@@ -23,8 +23,8 @@ function urlProblem(portfolio: Portfolio): string | null {
 }
 
 export async function GET() {
-  const portfolio = await loadPortfolio();
-  return NextResponse.json({ portfolio, storage: storageMode() });
+  const { portfolio, version } = await load();
+  return NextResponse.json({ portfolio, version, storage: storageMode() });
 }
 
 export async function PUT(request: Request) {
@@ -32,13 +32,15 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Session admin requise." }, { status: 401 });
   }
 
-  const body = (await request.json().catch(() => null)) as unknown;
-  if (!body || typeof body !== "object") {
+  const raw = (await request.json().catch(() => null)) as
+    | { portfolio?: unknown; version?: string }
+    | null;
+  if (!raw || !raw.portfolio || typeof raw.portfolio !== "object") {
     return NextResponse.json({ error: "Corps JSON invalide." }, { status: 400 });
   }
 
-  const portfolio = normalize(body);
-  const badUrl = urlProblem(portfolio);
+  const incoming = normalize(raw.portfolio);
+  const badUrl = urlProblem(incoming);
   if (badUrl) {
     return NextResponse.json(
       { error: `URL refusee (http/mailto uniquement) : ${badUrl}` },
@@ -46,13 +48,28 @@ export async function PUT(request: Request) {
     );
   }
 
+  // Le client renvoie la version chargee. Sans correspondance, on refuse : un vieil
+  // onglet ne doit pas pouvoir ecrire par-dessus le travail d'une autre session.
+  const incomingVersion = versionOf(incoming);
+  const current = await load();
+  const blindOverwrite =
+    typeof raw.version === "string" &&
+    raw.version !== current.version &&
+    incomingVersion !== current.version;
+  if (blindOverwrite) {
+    return NextResponse.json(
+      { error: "conflict", conflict: true, version: current.version, portfolio: current.portfolio },
+      { status: 409 },
+    );
+  }
+
   try {
-    await savePortfolio(portfolio);
+    await savePortfolio(incoming);
   } catch (error) {
     const message = error instanceof Error ? error.message : "ecriture impossible";
     return NextResponse.json({ error: `Enregistrement impossible : ${message}` }, { status: 500 });
   }
 
   revalidatePath("/", "layout");
-  return NextResponse.json({ ok: true, storage: storageMode() });
+  return NextResponse.json({ ok: true, storage: storageMode(), version: incomingVersion });
 }

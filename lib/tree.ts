@@ -188,6 +188,23 @@ export function insertNode(
   });
 }
 
+/**
+ * Signature du contenu. Servie au client a la lecture, renvoyee a l'ecriture :
+ * un enregistrement qui ne la retrouve pas dans le store est refuse, ce qui
+ * empeche un vieil onglet d'ecrire par-dessus le travail d'une autre session.
+ */
+export function versionOf(portfolio: Portfolio): string {
+  const text = JSON.stringify(portfolio);
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
+  }
+  return `${h1.toString(36)}-${h2.toString(36)}`;
+}
+
 export function normalize(input: unknown): Portfolio {
   const fallback = emptyPortfolio();
   if (!input || typeof input !== "object") return fallback;

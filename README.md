@@ -100,6 +100,27 @@ Connecte-toi sur `/login` : le tableau se pilote alors depuis sa propre barre su
 - L'arbre est stocké en public (Blob `access: "public"`), donc **les titres, notes et liens sont lisibles par quiconque devinant l'URL du JSON**. C'est un portfolio, pas un coffre. Si tu veux du privé, passe le blob en privé et sers l'arbre par une route authentifiée.
 - Le dossier `data/` local est gitignoré : ton contenu de dev ne part pas sur GitHub.
 
+## Écrire sans écraser
+
+`PUT /api/tree` remplace l'arbre entier : sans garde-fou, un onglet resté ouvert publie son
+vieil état et **fait disparaître tout ce qui a été créé depuis**. Le client envoie donc la
+`version` reçue en chargeant (`versionOf()` = signature du contenu, `lib/tree.ts`), et le
+serveur refuse le décalage par un `409` accompagné de l'arbre courant ; la barre de sauvegarde
+affiche alors « recharger la version publiée ». Deux onglets ouverts depuis des heures ne
+peuvent plus se marcher dessus.
+
+Reste une fenêtre de **6 à 12 s** aprés une écriture : Vercel Blob met ce temps à refléter sa
+propre donnée (`head()` annonce `max-age=60`, et un paramètre de query ne casse pas la clé de
+cache du CDN, qui se fait sur le chemin). Concretement :
+
+- ton onglet à toi est juste immédiatement — il garde son état local et ne relit pas ;
+- un rechargement ou un autre visiteur peut voir l'état précédent quelques secondes ;
+- deux sauvegardes a moins de dix secondes d'intervalle peuvent declencher un `409` abusif.
+  Il est dans le bon sens (il refuse d'ecrire) : un rechargement suffit.
+
+Pour une cohérence forte il faudrait KV ou Postgres ; le portage est une question de
+`lib/store.ts`, le reste de l'app ne parle qu'a `load()` et `savePortfolio()`.
+
 ## Structure
 
 ```

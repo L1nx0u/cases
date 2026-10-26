@@ -57,11 +57,13 @@ const ICON_PALETTE = ICON_CODEPOINTS.map((cp) => String.fromCodePoint(cp));
 
 export function BoardApp({
   initial,
+  initialVersion,
   admin,
   storage,
   initialPath,
 }: {
   initial: Portfolio;
+  initialVersion: string;
   admin: boolean;
   storage: "blob" | "file";
   initialPath: string[];
@@ -70,6 +72,8 @@ export function BoardApp({
   const searchRef = useRef<HTMLInputElement>(null);
   const [tree, setTree] = useState(initial);
   const [baseline, setBaseline] = useState(initial);
+  const [version, setVersion] = useState(initialVersion);
+  const [conflict, setConflict] = useState(false);
   const [path, setPath] = useState(initialPath);
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -82,20 +86,6 @@ export function BoardApp({
     () => JSON.stringify(tree) !== JSON.stringify(baseline),
     [tree, baseline],
   );
-
-  const treeRef = useRef(tree);
-  const baselineRef = useRef(baseline);
-  treeRef.current = tree;
-  baselineRef.current = baseline;
-
-  // Apres un refresh serveur : on ne recouvre l'etat local que s'il n'y a rien de pending.
-  useEffect(() => {
-    const clean = JSON.stringify(treeRef.current) === JSON.stringify(baselineRef.current);
-    if (clean && JSON.stringify(initial) !== JSON.stringify(treeRef.current)) {
-      setTree(initial);
-      setBaseline(initial);
-    }
-  }, [initial]);
 
   const go = useCallback((next: string[]) => {
     setPath(next);
@@ -239,17 +229,28 @@ export function BoardApp({
   async function persist() {
     setSaving(true);
     setError(null);
+    setConflict(false);
     try {
       const response = await fetch("/api/tree", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(tree),
+        body: JSON.stringify({ portfolio: tree, version }),
       });
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        conflict?: boolean;
+        version?: string;
+      };
+      if (response.status === 409 || data.conflict) {
+        setConflict(true);
+        throw new Error("le tableau a ete modifie ailleurs");
+      }
       if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      // L'etat local est la verite : un refresh serveur ramenerait la copie
+      // precedente pendant la fenetre de propagation du store (~10 s).
       setBaseline(tree);
+      if (data.version) setVersion(data.version);
       setToast("enregistre");
-      router.refresh();
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "enregistrement impossible");
     } finally {
@@ -395,6 +396,11 @@ export function BoardApp({
         <div className="savebar" role="status">
           <span className="dot" aria-hidden="true" />
           <span>{error ? <span className="err">{error}</span> : "modifications non enregistrees"}</span>
+          {conflict ? (
+            <button className="btn sm" onClick={() => window.location.reload()}>
+              recharger la version publiee
+            </button>
+          ) : null}
           <button className="btn sm" onClick={() => setTree(initial)} disabled={saving}>
             annuler
           </button>

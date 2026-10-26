@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { emptyPortfolio, normalize, type Portfolio } from "./tree";
+import { emptyPortfolio, normalize, versionOf, type Portfolio } from "./tree";
 
 const BLOB_KEY = "portfolio/data.json";
 const LOCAL_FILE = path.join(process.cwd(), "data", "portfolio.json");
@@ -16,25 +16,11 @@ export function storageMode(): "blob" | "file" {
 }
 
 /**
- * Lecture via l'API authentifiee (`get`), pas via l'URL publique : le CDN de Blob
- * cle sur le chemin et ignore tout parametre de query, donc l'URL peut servir une
- * copie de quelques secondes apres une ecriture. `get` renvoie null si le fichier
- * n'existe pas ; toute autre erreur remonte, pour ne jamais afficher un tableau
- * vide qui serait ensuite enregistre par-dessus les donnees reelles.
+ * Lecture via l'API authentifiee (`get`), pas via l'URL publique : le CDN de Blob cle
+ * sur le chemin et ignore tout parametre de query. `get` renvoie null si le fichier
+ * n'existe pas ; toute autre erreur remonte, pour ne jamais afficher un tableau vide
+ * qui serait ensuite enregistre par-dessus les donnees reelles.
  */
-async function readBlob(): Promise<Portfolio | null> {
-  const { get } = await import("@vercel/blob");
-  const result = await get(BLOB_KEY, {
-    access: "public",
-    token: process.env.BLOB_READ_WRITE_TOKEN,
-    headers: { "cache-control": "no-cache" },
-  });
-  if (result === null) return null;
-  if (!result.stream) throw new Error("Blob: reponse sans contenu");
-  const text = await new Response(result.stream).text();
-  return normalize(JSON.parse(text));
-}
-
 async function writeBlob(portfolio: Portfolio): Promise<void> {
   const { put } = await import("@vercel/blob");
   await put(BLOB_KEY, JSON.stringify(portfolio, null, 2), {
@@ -63,9 +49,37 @@ async function writeFile(portfolio: Portfolio): Promise<void> {
   await fs.writeFile(LOCAL_FILE, JSON.stringify(portfolio, null, 2), "utf8");
 }
 
+export interface Loaded {
+  portfolio: Portfolio;
+  version: string;
+}
+
+/**
+ * Lecture via l'API authentifiee (`get`), pas via l'URL publique : le CDN de Blob cle
+ * sur le chemin et ignore tout parametre de query. `get` renvoie null si le fichier
+ * n'existe pas ; toute autre erreur remonte, pour ne jamais afficher un tableau vide
+ * qui serait ensuite enregistre par-dessus les donnees reelles.
+ */
+export async function load(): Promise<Loaded> {
+  if (storageMode() === "blob") {
+    const { get } = await import("@vercel/blob");
+    const result = await get(BLOB_KEY, {
+      access: "public",
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    });
+    if (result === null) return { portfolio: emptyPortfolio(), version: versionOf(emptyPortfolio()) };
+    if (!result.stream) throw new Error("Blob: reponse sans contenu");
+    const text = await new Response(result.stream).text();
+    const portfolio = normalize(JSON.parse(text));
+    return { portfolio, version: versionOf(portfolio) };
+  }
+  const stored = await readFile();
+  if (!stored) return { portfolio: emptyPortfolio(), version: versionOf(emptyPortfolio()) };
+  return { portfolio: stored, version: versionOf(stored) };
+}
+
 export async function loadPortfolio(): Promise<Portfolio> {
-  const stored = storageMode() === "blob" ? await readBlob() : await readFile();
-  return stored ?? emptyPortfolio();
+  return (await load()).portfolio;
 }
 
 export async function savePortfolio(portfolio: Portfolio): Promise<void> {
