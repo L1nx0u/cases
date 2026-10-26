@@ -1,7 +1,7 @@
 import { Board, Masthead } from "@/components/Board";
 import { loadPortfolio } from "@/lib/store";
 
-export const revalidate = 20;
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const portfolio = await loadPortfolio();

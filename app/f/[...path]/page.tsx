@@ -3,7 +3,7 @@ import { Board, Crumbs, Masthead } from "@/components/Board";
 import { loadPortfolio } from "@/lib/store";
 import { nodeAt } from "@/lib/tree";
 
-export const revalidate = 20;
+export const dynamic = "force-dynamic";
 
 export default async function FolderPage({ params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;
