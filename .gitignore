@@ -9,3 +9,8 @@ out/
 data/portfolio.json
 tsconfig.tsbuildinfo
 next-env.d.ts
+
+.vercel
+.env*
+
+!.env.example
