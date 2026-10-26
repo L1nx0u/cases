@@ -19,7 +19,9 @@ async function readBlob(): Promise<Portfolio | null> {
   const { head } = await import("@vercel/blob");
   try {
     const blob = await head(BLOB_KEY, { token: process.env.BLOB_READ_WRITE_TOKEN });
-    const res = await fetch(blob.url, { cache: "no-store" });
+    // Le bord de Vercel garde la reponse du blob quelques secondes apres une ecriture :
+    // un parametre unique force la lecture du fichier tel qu'il est maintenant.
+    const res = await fetch(`${blob.url}?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) return null;
     return normalize(await res.json());
   } catch {

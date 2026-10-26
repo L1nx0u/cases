@@ -69,14 +69,33 @@ export function BoardApp({
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
   const [tree, setTree] = useState(initial);
+  const [baseline, setBaseline] = useState(initial);
   const [path, setPath] = useState(initialPath);
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [settings, setSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const dirty = useMemo(() => JSON.stringify(tree) !== JSON.stringify(initial), [tree, initial]);
+  const dirty = useMemo(
+    () => JSON.stringify(tree) !== JSON.stringify(baseline),
+    [tree, baseline],
+  );
+
+  const treeRef = useRef(tree);
+  const baselineRef = useRef(baseline);
+  treeRef.current = tree;
+  baselineRef.current = baseline;
+
+  // Apres un refresh serveur : on ne recouvre l'etat local que s'il n'y a rien de pending.
+  useEffect(() => {
+    const clean = JSON.stringify(treeRef.current) === JSON.stringify(baselineRef.current);
+    if (clean && JSON.stringify(initial) !== JSON.stringify(treeRef.current)) {
+      setTree(initial);
+      setBaseline(initial);
+    }
+  }, [initial]);
 
   const go = useCallback((next: string[]) => {
     setPath(next);
@@ -92,6 +111,10 @@ export function BoardApp({
   }, []);
 
   useEffect(() => {
+    document.title = tree.siteTitle?.trim() || "cases";
+  }, [tree.siteTitle]);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 2600);
     return () => window.clearTimeout(timer);
@@ -104,6 +127,7 @@ export function BoardApp({
       );
       if (event.key === "Escape") {
         setDraft(null);
+        setSettings(false);
         setError(null);
         return;
       }
@@ -151,12 +175,14 @@ export function BoardApp({
   const total = useMemo(() => tree.root.reduce((sum, n) => sum + countLinks(n), 0), [tree]);
 
   function interceptClick(event: React.MouseEvent<HTMLElement>) {
-    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>("a[data-nav]");
+    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>("a[href]");
     if (!anchor) return;
+    const href = anchor.getAttribute("href") ?? "";
+    if (href !== "/" && !href.startsWith("/f/")) return;
+    if (anchor.target === "_blank") return;
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
     event.preventDefault();
-    const raw = anchor.dataset.nav ?? "";
-    go(raw ? raw.split("/").filter(Boolean) : []);
+    go(pathFromUrl(href));
   }
 
   function commitDraft(next: Draft) {
@@ -221,6 +247,7 @@ export function BoardApp({
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      setBaseline(tree);
       setToast("enregistre");
       router.refresh();
     } catch (problem) {
@@ -248,7 +275,7 @@ export function BoardApp({
   });
 
   return (
-    <>
+    <div className="app" onClick={interceptClick}>
       <TopBar>
         <div className="search">
           <span className="icon" aria-hidden="true">
@@ -278,6 +305,9 @@ export function BoardApp({
               <button className="btn" onClick={() => create("folder")}>
                 + Dossier
               </button>
+              <button className="btn ghost" onClick={() => setSettings(true)}>
+                réglages
+              </button>
               <button className="btn ghost" onClick={signOut}>
                 quitter
               </button>
@@ -290,7 +320,7 @@ export function BoardApp({
         </div>
       </TopBar>
 
-      <main className="shell" onClick={interceptClick}>
+      <main className="shell">
         <section className="head">
           <Breadcrumbs path={path} />
           <h1>{path.length === 0 ? tree.siteTitle : (nodeAt(tree, path)?.title ?? path[path.length - 1])}</h1>
@@ -393,7 +423,20 @@ export function BoardApp({
           onDelete={() => remove(draft.id as string)}
         />
       ) : null}
-    </>
+
+      {settings ? (
+        <SettingsModal
+          title={tree.siteTitle}
+          tagline={tree.siteTagline}
+          onClose={() => setSettings(false)}
+          onSubmit={(siteTitle, siteTagline) => {
+            setTree({ ...tree, siteTitle, siteTagline });
+            setSettings(false);
+            setToast("titre mis a jour — pense a enregistrer");
+          }}
+        />
+      ) : null}
+    </div>
   );
 
   function openEditor(id: string) {
@@ -415,6 +458,73 @@ export function BoardApp({
 
 function parentOf(tree: Portfolio, parentPath: string[]): TreeNode[] {
   return childrenAt(tree, parentPath) ?? [];
+}
+
+function SettingsModal({
+  title,
+  tagline,
+  onClose,
+  onSubmit,
+}: {
+  title: string;
+  tagline: string;
+  onClose: () => void;
+  onSubmit: (title: string, tagline: string) => void;
+}) {
+  const [nextTitle, setNextTitle] = useState(title);
+  const [nextTagline, setNextTagline] = useState(tagline);
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <form
+        className="modal"
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit(nextTitle.trim() || "cases", nextTagline.trim());
+        }}
+      >
+        <div className="modal-head">
+          <h2>Réglages du tableau</h2>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="fermer">
+            ✕
+          </button>
+        </div>
+        <div className="form">
+          <div className="field">
+            <label htmlFor="s-title">titre de la page</label>
+            <input
+              id="s-title"
+              autoFocus
+              value={nextTitle}
+              onChange={(event) => setNextTitle(event.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="s-tagline">accroche sous le titre</label>
+            <input
+              id="s-tagline"
+              value={nextTagline}
+              placeholder="une ligne qui explique le tableau"
+              onChange={(event) => setNextTagline(event.target.value)}
+            />
+          </div>
+          <p className="hint">
+            Le titre s'affiche a la racine et dans l'onglet du navigateur.
+          </p>
+        </div>
+        <div className="modal-foot">
+          <span className="spacer" />
+          <button type="button" className="btn ghost" onClick={onClose}>
+            annuler
+          </button>
+          <button type="submit" className="btn primary">
+            appliquer
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function IconPreview({ draft }: { draft: Draft }) {

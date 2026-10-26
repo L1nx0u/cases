@@ -62,7 +62,7 @@ export function TopBar({ children }: { children?: React.ReactNode }) {
   return (
     <header className="topbar">
       <div className="topbar-inner">
-        <a className="logo" href="/" data-nav>
+        <a className="logo" href="/">
           <span className="logo-dot" aria-hidden="true" />
           cases
         </a>
@@ -75,7 +75,7 @@ export function TopBar({ children }: { children?: React.ReactNode }) {
 export function Breadcrumbs({ path }: { path: string[] }) {
   return (
     <nav className="crumbs" aria-label="emplacement">
-      <a href="/" data-nav aria-current={path.length === 0 ? "page" : undefined}>
+      <a href="/" aria-current={path.length === 0 ? "page" : undefined}>
         tableau
       </a>
       {path.map((slug, i) => {
@@ -84,7 +84,7 @@ export function Breadcrumbs({ path }: { path: string[] }) {
         return (
           <span key={slug} style={{ display: "inline-flex", gap: "0.3rem", alignItems: "center" }}>
             <span aria-hidden="true">/</span>
-            <a href={href} data-nav aria-current={last ? "page" : undefined}>
+            <a href={href} aria-current={last ? "page" : undefined}>
               {slug}
             </a>
           </span>
@@ -164,7 +164,7 @@ export function Card({
           className="card-hit"
           href={href}
           {...(isFolder
-            ? { "data-nav": nodePath.join("/"), "aria-label": `Ouvrir le dossier ${node.title}` }
+            ? { "aria-label": `Ouvrir le dossier ${node.title}` }
             : { target: "_blank", rel: "noopener noreferrer", "aria-label": `Ouvrir ${node.title}` })}
         />
       ) : null}
