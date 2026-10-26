@@ -27,6 +27,7 @@ async function readBlob(): Promise<Portfolio | null> {
   const result = await get(BLOB_KEY, {
     access: "public",
     token: process.env.BLOB_READ_WRITE_TOKEN,
+    headers: { "cache-control": "no-cache" },
   });
   if (result === null) return null;
   if (!result.stream) throw new Error("Blob: reponse sans contenu");
