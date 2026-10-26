@@ -5,8 +5,14 @@ import { emptyPortfolio, normalize, type Portfolio } from "./tree";
 const BLOB_KEY = "portfolio/data.json";
 const LOCAL_FILE = path.join(process.cwd(), "data", "portfolio.json");
 
+/**
+ * Blob des que Vercel fournit de quoi l'authentifier : jeton statique (ancienne
+ * methode) ou connexion de store en mode OIDC (BLOB_STORE_ID + VERCEL_OIDC_TOKEN).
+ */
 export function storageMode(): "blob" | "file" {
-  return process.env.BLOB_READ_WRITE_TOKEN ? "blob" : "file";
+  if (process.env.BLOB_READ_WRITE_TOKEN) return "blob";
+  if (process.env.BLOB_STORE_ID && process.env.VERCEL_OIDC_TOKEN) return "blob";
+  return process.env.VERCEL === "1" ? "blob" : "file";
 }
 
 async function readBlob(): Promise<Portfolio | null> {

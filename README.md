@@ -39,20 +39,32 @@ npm run dev                  # http://localhost:3000
 
 ## Déployer sur Vercel
 
-1. Pousse ce dossier sur un repo GitHub, puis **Import Project** sur vercel.com (framework détecté : Next.js, rien à configurer).
-2. Active **Storage → Blob** sur le projet Vercel : la variable `BLOB_READ_WRITE_TOKEN` est injectée automatiquement. Sans elle, l'app ne peut pas écrire en production (le système de fichiers serverless est en lecture seule).
-3. Ajoute les variables d'environnement dans **Project → Settings → Environment Variables** :
-   - `ADMIN_PASSWORD` — le mot de passe de la console (long, aléatoire)
-   - `SESSION_SECRET` — secret de signature des cookies (le changer invalide toutes les sessions ouvertes)
-4. Redéploie. Va sur `https://<ton-domaine>/login`, entre le mot de passe, crée la première case.
-
-En CLI :
+Le projet `weshlynx/cases` est déjà lié (`.vercel/`, gitignoré) et le store Blob
+`cases-data` (région `cdg1`, accès public) est connecté en **OIDC**.
 
 ```bash
-npm i -g vercel
-vercel link && vercel env add ADMIN_PASSWORD && vercel env add SESSION_SECRET
+vercel link --yes --project cases
+vercel storage create cases-data --type blob --access public --region cdg1
+vercel storage connect cases-data --yes
+vercel env add ADMIN_PASSWORD --environment production --force
+vercel env add SESSION_SECRET --environment production --force
 vercel --prod
 ```
+
+Deux modes d'authentification Blob sont gérés par `lib/store.ts` :
+
+- **OIDC** (actif ici) : la connexion du store injecte `BLOB_STORE_ID` et le SDK s'autofirme
+  avec `VERCEL_OIDC_TOKEN`. Aucun jeton statique à stocker.
+- **Jeton statique** : `BLOB_READ_WRITE_TOKEN`, si tu crées le store depuis le dashboard sans
+  connexion OIDC.
+
+Sans l'un des deux, l'app retombe sur `data/portfolio.json` : parfait en local, inutile en
+production (le filesystem serverless est en lecture seule).
+
+Variables à renseigner :
+
+- `ADMIN_PASSWORD` — le mot de passe de la console (long, aléatoire)
+- `SESSION_SECRET` — secret de signature des cookies (le changer invalide toutes les sessions ouvertes)
 
 ## Utiliser la console
 
