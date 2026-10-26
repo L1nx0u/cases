@@ -2,18 +2,19 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "cases — tableau",
-  description: "Un tableau de cases vides. Seule la personne qui le possède en remplit une.",
-  metadataBase: new URL("https://cases.vercel.app"),
-  other: { "color-scheme": "light" },
+  title: "cases",
+  description: "Un tableau de cases. Vide jusqu'a ce que je le remplisse.",
+  metadataBase: new URL("https://cases-bay.vercel.app"),
+  other: { "color-scheme": "dark" },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#e9e2d3",
+  themeColor: "#0b0c0e",
+  colorScheme: "dark",
 };
 
 const FONTS =
-  "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&display=swap";
+  "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

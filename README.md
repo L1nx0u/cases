@@ -4,17 +4,25 @@ Un portfolio réduit à son geste de base : une grille de cases. **Vide par déf
 Personne ne peut rien poser sans le mot de passe. Une case = un lien vers un site, ou un
 dossier qui contient d'autres cases (imbricables à volonté).
 
-Design : papier d'archive, bordures tremblées dessinées à la main, scotch au survol,
-ombres franches, tampon vermillon en mode admin. `Bricolage Grotesque` + `IBM Plex Mono`.
+Design : interface sombre, une seule accent lime sur neutre chaud. Les **dossiers ont la
+silhouette d'un dossier** (onglet découpé en `clip-path`, épaulements diagonaux, rabat
+tinté) et les liens une carte rectangle : on les distingue sans lire. Chaque case porte une
+icône — emoji choisi dans la palette, ou URL d'image — et retombe sur un monogramme coloré
+dérivé de l'hôte quand aucune icône n'est définie. Typo `Outfit` + `DM Mono`.
+
+Navigation : recherche instantanée sur tout l'arbre (résultats aplatifiés avec leur chemin
+d'origine), ouverture des dossiers sans rechargement, `n` nouvelle case, `/` recherche,
+`Échap` ferme l'éditeur. Édition en place : la console est devenue la barre supérieure du
+tableau, un enregistreur flottant valide les changements.
 
 ## Ce qui est public / ce qui est privé
 
 | URL | accès |
 |---|---|
-| `/` | public — la grille |
+| `/` | public — la grille ; avec la session admin, les contrôles d'édition apparaissent |
 | `/f/<slug>/<slug>…` | public — un dossier et ses cases |
-| `/admin` | **protégé** — console de création |
 | `/login` | formulaire du mot de passe |
+| `/admin` | redirige vers `/` (console en ligne) ou `/login` (session absente) |
 | `PUT /api/tree` | **protégé** — écriture de l'arbre entier |
 
 La lecture est ouverte, l'écriture est fermée. Pas de compte, pas de base de données,
@@ -23,8 +31,9 @@ pas de dépendance à une API tierce.
 ## Stack
 
 - Next.js 15 (App Router, RSC) + TypeScript, CSS écrit à la main (`app/globals.css`, aucun framework CSS)
-- Stockage : **Vercel Blob** (`portfolio/data.json`, un seul fichier JSON, écrasé à chaque enregistrement)
-- Repli local : `data/portfolio.json` quand `BLOB_READ_WRITE_TOKEN` est absent (dev uniquement)
+- Stockage : **Vercel Blob** (`portfolio/data.json`, un seul fichier JSON, écrasé à chaque enregistrement),
+  authentification **OIDC** via `BLOB_STORE_ID` + `VERCEL_OIDC_TOKEN`
+- Repli local : `data/portfolio.json` hors Vercel (dev uniquement)
 - Session admin : cookie `httpOnly` signé en HMAC-SHA256, 30 jours
 
 ## Lancer en local
@@ -66,43 +75,55 @@ Variables à renseigner :
 - `ADMIN_PASSWORD` — le mot de passe de la console (long, aléatoire)
 - `SESSION_SECRET` — secret de signature des cookies (le changer invalide toutes les sessions ouvertes)
 
-## Utiliser la console
+## Éditer le tableau
 
-- `+ case` crée un lien sortant, `+ dossier` crée un conteneur de cases.
-- `éditer` ouvre titre / url / note / étiquettes ; l'URL publique est déduite du titre (slug) et affichée en bas de l'éditeur.
-- Glisser une case sur une autre la place **avant** ; sur un dossier, l'**y range** ; sous la liste, la met **à la fin**. Le menu « déplacer vers » fait le même travail au clavier.
-- Rien n'est écrit tant que tu n'as pas cliqué **enregistrer** (bouton grisé tant que l'état n'est pas modifié).
-- Onglet **json brut** : édition directe de l'arbre entier, avec validation au retour. Utile pour coller une longue liste de liens d'un coup.
+Connecte-toi sur `/login` : le tableau se pilote alors depuis sa propre barre supérieure.
+
+- `+ Nouvelle case` ouvre un lien sortant, `+ Dossier` un conteneur de cases. Les deux
+  boutons existent aussi en pied de grille quand un niveau est vide.
+- Survoler une carte fait apparaître `✎` : l'éditeur s'ouvre en place (titre, icône, adresse,
+  note, étiquettes, emplacement). L'adresse publique est déduite du titre et affichée en bas.
+- **Icônes** : 32 glyphes dans la palette, ou n'importe quel emoji collé dans le champ, ou
+  l'URL d'une image. Sans icône, une carte de lien reçoit un monogramme coloré dérivé de son
+  hôte ; un dossier garde sa silhouette, son rabat suffit.
+- **Déplacer** une case se fait par le champ « emplacement » (la liste exclut ses propres
+  sous-dossiers, impossible donc de l'enferrer dans elle-même).
+- Rien n'est écrit avant le bouton **enregistrer** de la barre flottante ; `annuler` revient à
+  l'état publié.
+- Raccourcis : `/` recherche, `n` nouvelle case, `Échap` ferme l'éditeur.
 
 ## Notes de sécurité (honnêtes)
 
-- Le mot de passe est comparé en temps constant ; les URL `javascript:` et autres sont rejetées à l'écriture comme à l'affichage (`isSafeUrl`).
+- Le mot de passe est comparé en temps constant ; les URL `javascript:` et autres sont rejetées
+  à l'écriture, sur le champ `url` comme sur un champ `icon` qui y ressemble (`isSafeUrl`).
 - L'anti-brute-force (`lib/auth.ts:rateLimit`) est **par instance** : sur serverless, un attaquant distribué peut le contourner. La vraie défense est un `ADMIN_PASSWORD` long et aléatoire.
 - L'arbre est stocké en public (Blob `access: "public"`), donc **les titres, notes et liens sont lisibles par quiconque devinant l'URL du JSON**. C'est un portfolio, pas un coffre. Si tu veux du privé, passe le blob en privé et sers l'arbre par une route authentifiée.
-- Le fichier `data/portfolio.json` local est gitignoré : ton contenu de dev ne part pas sur GitHub.
+- Le dossier `data/` local est gitignoré : ton contenu de dev ne part pas sur GitHub.
 
 ## Structure
 
 ```
 app/
-  page.tsx                 grille racine
-  f/[...path]/page.tsx     dossiers imbriqués
-  admin/page.tsx           garde + console
+  page.tsx                 grille racine (garde admin lue cote serveur)
+  f/[...path]/page.tsx     dossiers imbriques
+  admin/page.tsx           redirecteur selon la session
   login/page.tsx           formulaire
   api/session/route.ts     connexion (JSON + formulaire HTML)
-  api/logout/route.ts      déconnexion
-  api/tree/route.ts        lecture / écriture de l'arbre
-  globals.css              toute l'identité visuelle (variables en :root)
+  api/logout/route.ts      deconnexion
+  api/tree/route.ts        lecture / ecriture de l'arbre
+  globals.css              toute l'identite visuelle (variables en :root)
 components/
-  Board.tsx                masthead, fil d'ariane, cartes, cases vides
-  AdminConsole.tsx         éditeur client (création, glisser-déposer, JSON)
-  deco.tsx                 trait dessiné à la main + inclinaison des cartes
+  Chrome.tsx               barre haute, fil d'ariane, carte, carte-dossier, icone
+  BoardApp.tsx             etat client : recherche, navigation, editeur, sauvegarde
 lib/
-  tree.ts                  modèle, slugs, déplacements, normalisation
-  nodes.ts                 recherche/mise à jour/liste des dossiers
+  tree.ts                  modele, slugs, deplacements, normalisation, icones
+  nodes.ts                 recherche/mise a jour/liste des dossiers
   store.ts                 Blob <-> fichier local
-  auth.ts                  mot de passe, cookie signé, rate limit
+  auth.ts                  mot de passe, cookie signe, rate limit
 ```
 
-Pour changer la palette : `app/globals.css:1` (`--paper`, `--ink`, `--stamp`).
-Pour changer l'inclinaison maximale des cartes : `components/deco.tsx:15` (`tiltOf`).
+Palette et rayons : `app/globals.css:1` (`--bg`, `--surface`, `--accent`).
+Silhouette du dossier : `app/globals.css:428` (`.folder-shell`, variables `--tab` et `--notch`).
+Palette d'icônes : `components/BoardApp.tsx:49` (`ICON_CODEPOINTS`, construite par points de
+code pour survivre aux encodages).
+Retombée monogramme : `components/Chrome.tsx:23` (`CardIcon`).

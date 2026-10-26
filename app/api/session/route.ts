@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
   const cookie = sessionCookie(makeToken());
   const response = acceptsHtml
-    ? NextResponse.redirect(new URL("/admin", request.url), 303)
+    ? NextResponse.redirect(new URL("/", request.url), 303)
     : NextResponse.json({ ok: true });
   response.cookies.set(cookie.name, cookie.value, {
     httpOnly: cookie.httpOnly,

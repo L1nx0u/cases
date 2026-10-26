@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { loadPortfolio, savePortfolio, storageMode } from "@/lib/store";
-import { isSafeUrl, normalize, type Portfolio } from "@/lib/tree";
+import { isImageUrl, isSafeUrl, normalize, type Portfolio } from "@/lib/tree";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +11,7 @@ function urlProblem(portfolio: Portfolio): string | null {
   const walk = (nodes: Portfolio["root"]): string | null => {
     for (const node of nodes) {
       if (node.kind === "link" && node.url && !isSafeUrl(node.url)) return node.url;
+      if (node.icon && isImageUrl(node.icon) && !isSafeUrl(node.icon)) return node.icon;
       if (node.kind === "folder") {
         const hit = walk(node.children ?? []);
         if (hit) return hit;

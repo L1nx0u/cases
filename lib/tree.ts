@@ -6,6 +6,7 @@ export interface TreeNode {
   slug: string;
   title: string;
   url?: string;
+  icon?: string;
   note?: string;
   tags?: string[];
   children?: TreeNode[];
@@ -205,9 +206,10 @@ export function normalize(input: unknown): Portfolio {
           title,
           createdAt: typeof n.createdAt === "number" ? n.createdAt : Date.now(),
         };
+        node.note = typeof n.note === "string" ? n.note : "";
+        node.icon = typeof n.icon === "string" ? n.icon.trim() : "";
         if (kind === "link") {
           node.url = typeof n.url === "string" ? n.url : "";
-          node.note = typeof n.note === "string" ? n.note : "";
           node.tags = Array.isArray(n.tags) ? n.tags.filter((t): t is string => typeof t === "string") : [];
         } else {
           node.children = walk(n.children);
@@ -245,4 +247,20 @@ export function hostOf(value?: string): string {
 export function isRepo(value?: string): boolean {
   if (!value) return false;
   return /^https?:\/\/(www\.)?github\.com\/[^/]+\/[^/]+/.test(value);
+}
+
+export function isImageUrl(value?: string): boolean {
+  return Boolean(value && /^https?:\/\//i.test(value));
+}
+
+export function monogram(node: TreeNode): string {
+  const source = hostOf(node.url) || node.title || "case";
+  const letter = source.replace(/^[^a-z0-9]+/i, "").charAt(0);
+  return (letter || "?").toUpperCase();
+}
+
+export function hueOf(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i += 1) h = (h * 33 + seed.charCodeAt(i)) % 360;
+  return h;
 }
